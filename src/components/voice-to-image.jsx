@@ -145,6 +145,7 @@ const VoiceToImage = () => {
   const startVoiceSceneRecording = () => {
     setIsAddingVoiceScene(true);
     setNewSceneText('');
+    resetTranscript();
     SpeechRecognition.startListening({ 
       continuous: true,
       language: language,
@@ -373,6 +374,7 @@ const VoiceToImage = () => {
   };
 
   const startListening = () => {
+    resetTranscript();
     SpeechRecognition.startListening({ 
       continuous: true,
       language: language,
@@ -609,16 +611,14 @@ const VoiceToImage = () => {
           }
         </p>
 
-        {currentMode === 'single' && (
-          <div className="language-toggle">
-            <button onClick={toggleLanguage}>
-              <i className="fas fa-globe"></i> Switch Language: 
-              {language === 'en-IN' ? ' English' : 
-               language === 'hi-IN' ? ' हिंदी' : 
-               language === 'te-IN' ? ' తెలుగు' : 'English'}
-            </button>
-          </div>
-        )}
+        <div className="language-toggle">
+          <button onClick={toggleLanguage}>
+            <i className="fas fa-globe"></i> Switch Language: 
+            {language === 'en-IN' ? ' English' : 
+             language === 'hi-IN' ? ' हिंदी' : 
+             language === 'te-IN' ? ' తెలుగు' : 'English'}
+          </button>
+        </div>
 
         {currentMode === 'saga' ? (
           // Saga Mode UI
@@ -643,6 +643,12 @@ const VoiceToImage = () => {
               </div>
 
               <div className="transcript-box">
+                <div className="current-language-indicator">
+                  <i className="fas fa-globe"></i> 
+                  {language === 'en-IN' ? 'English' : 
+                   language === 'hi-IN' ? 'हिंदी' : 
+                   language === 'te-IN' ? 'తెలుగు' : 'English'}
+                </div>
                 {sagaStory.length > 0 ? (
                   <div className="story-preview">
                     <h4>Your Story ({sagaStory.length} scenes):</h4>
@@ -758,12 +764,22 @@ const VoiceToImage = () => {
               <div className="modal-overlay" onClick={() => setShowAddSceneModal(false)}>
                 <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                   <h3>Add New Scene</h3>
+                  <div className="current-language-display">
+                    <i className="fas fa-globe"></i> Recording in: 
+                    {language === 'en-IN' ? ' English' : 
+                     language === 'hi-IN' ? ' हिंदी' : 
+                     language === 'te-IN' ? ' తెలుగు' : ' English'}
+                  </div>
                   <div className="add-scene-options">
                     <div className="text-input-section">
                       <textarea
                         value={newSceneText}
                         onChange={(e) => setNewSceneText(e.target.value)}
-                        placeholder="Type your new scene here..."
+                        placeholder={
+                          language === 'hi-IN' ? 'यहाँ अपना नया दृश्य लिखें...' :
+                          language === 'te-IN' ? 'మీ కొత్త దృశ్యాన్ని ఇక్కడ టైప్ చేయండి...' :
+                          'Type your new scene here...'
+                        }
                         rows={4}
                         className="scene-textarea"
                       />
@@ -782,13 +798,21 @@ const VoiceToImage = () => {
                           <>
                             <div className="recording-indicator">
                               <div className="pulse-dot"></div>
-                              Recording... Click stop when done
+                              {language === 'hi-IN' ? 'रिकॉर्डिंग... समाप्त होने पर स्टॉप क्लिक करें' :
+                               language === 'te-IN' ? 'రికార్డింగ్... పూర్తయినప్పుడు స్టాప్ క్లిక్ చేయండి' :
+                               'Recording... Click stop when done'}
                             </div>
                             <div className="live-transcript">
-                              {transcript || 'Speak your scene...'}
+                              {transcript || (
+                                language === 'hi-IN' ? 'अपना दृश्य बोलें...' :
+                                language === 'te-IN' ? 'మీ దృశ్యాన్ని మాట్లాడండి...' :
+                                'Speak your scene...'
+                              )}
                             </div>
                           </>
                         ) : (
+                          language === 'hi-IN' ? 'आवाज़ के साथ अपना दृश्य रिकॉर्ड करने के लिए क्लिक करें' :
+                          language === 'te-IN' ? 'వాయిస్‌తో మీ దృశ్యాన్ని రికార్డ్ చేయడానికి క్లిక్ చేయండి' :
                           'Click to record your scene with voice'
                         )}
                       </div>

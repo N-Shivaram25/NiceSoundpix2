@@ -62,6 +62,29 @@
   position: relative;
 }
 
+/* Language indicators */
+.current-language-indicator {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  color: #667eea;
+  margin-bottom: 10px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.current-language-display {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-size: 0.95em;
+  color: #667eea;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: 500;
+}
+
 /* ADD SCENE BUTTON */
 .add-scene-button {
   position: fixed;
@@ -851,74 +874,74 @@
     gap: 1rem;
     padding: 1rem;
   }
-  
+
   .nav-left {
     flex-wrap: wrap;
     justify-content: center;
   }
-  
+
   .nav-button {
     padding: 0.5rem 1rem;
     font-size: 0.9rem;
   }
-  
+
   .images-container {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
-  
+
   .controls, .saga-controls {
     flex-direction: column;
     align-items: center;
   }
-  
+
   .voice-animation {
     height: 100px;
   }
-  
+
   .mic-icon {
     width: 60px;
     height: 60px;
     font-size: 24px;
   }
-  
+
   .history-sidebar {
     width: 250px;
   }
-  
+
   .navigation {
     flex-direction: column;
     gap: 1rem;
   }
-  
+
   .navigation span {
     max-width: 100%;
   }
-  
+
   .storyboard-container {
     grid-template-columns: 1fr;
   }
-  
+
   .storyboard-scene img {
     height: 260px;
   }
-  
+
   .add-scene-button {
     right: 15px;
     width: 50px;
     height: 50px;
     font-size: 20px;
   }
-  
+
   .modal-content {
     padding: 1.5rem;
     margin: 1rem;
   }
-  
+
   .add-scene-options {
     gap: 1.5rem;
   }
-  
+
   .text-input-section, .voice-input-section {
     padding: 1rem;
   }
