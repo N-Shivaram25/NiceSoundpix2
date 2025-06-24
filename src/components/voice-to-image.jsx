@@ -47,7 +47,7 @@ const VoiceToImage = () => {
 
   const currentSet = imageSets[currentSetIndex];
   const CLIPDROP_API_KEY = '365439e8863868b2d2d7cd6fa7ad12501cb00156468a57f65f489c60922e831a37575c0d9762a4519a5d306f657697e2';
-  const RUNWAY_ML_API_KEY = process.env.REACT_APP_RUNWAY_ML_API_KEY || 'rml_iIf1XKG6KRYKwgGRi9FZf38qSMbR4vgHOD'; // Replace with your actual Runway ML API key
+  const RUNWAY_ML_API_KEY = 'key_1bbe861aa42b13ec185d3bf1f2227afd4fae57010cdd674f8de0e91902ec4427d3cb4123fe9405893bd67f323ca956ed90a482f3f9ac600943605719dbe68cb7';
 
   useEffect(() => {
     // Auto-detect language based on browser settings
@@ -446,18 +446,14 @@ const VoiceToImage = () => {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
             // Runway ML Text-to-Video API call
-            const response = await fetch('https://api.runwayml.com/v1/image_to_video', {
+            const response = await fetch('https://api.runwayml.com/v1/gen2', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                model: 'gen3a_turbo',
-                prompt_text: englishPrompt,
-                duration: 5,
-                ratio: '16:9',
-                watermark: false
+                prompt: englishPrompt
               }),
             });
 
@@ -482,69 +478,88 @@ const VoiceToImage = () => {
             const data = await response.json();
             console.log('API Response data:', data);
             
-            const taskId = data.id;
-            if (!taskId) {
-              throw new Error('No task ID received from Runway ML API');
-            }
-
-            // Poll for video completion
-            let videoReady = false;
-            let attempts = 0;
-            const maxAttempts = 60; // 5 minutes maximum wait time
-            
-            while (!videoReady && attempts < maxAttempts) {
-              await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            // Check if the response contains a direct video URL or task ID
+            if (data.url || data.video_url || data.output) {
+              // Direct video URL response
+              completedVideos++;
+              setVideoGenerationProgress((completedVideos / totalVideos) * 100);
               
-              try {
-                const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}`, {
-                  headers: {
-                    'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
-                    'Content-Type': 'application/json'
-                  },
-                });
+              const newVideo = {
+                id: `${promptIndex}-${videoNumber}`,
+                promptIndex,
+                videoNumber,
+                videoUrl: data.url || data.video_url || data.output,
+                prompt: prompt,
+                translatedPrompt: englishPrompt,
+                status: 'completed'
+              };
+              
+              setGeneratedVideos(prev => [...prev, newVideo]);
+              console.log('Video completed successfully:', newVideo);
+              
+            } else if (data.id || data.task_id) {
+              // Task-based response - need to poll for completion
+              const taskId = data.id || data.task_id;
+              let videoReady = false;
+              let attempts = 0;
+              const maxAttempts = 60; // 5 minutes maximum wait time
+              
+              while (!videoReady && attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+                
+                try {
+                  const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}`, {
+                    headers: {
+                      'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
+                      'Content-Type': 'application/json'
+                    },
+                  });
 
-                if (!statusResponse.ok) {
-                  console.error(`Status check failed: ${statusResponse.status}`);
+                  if (!statusResponse.ok) {
+                    console.error(`Status check failed: ${statusResponse.status}`);
+                    attempts++;
+                    continue;
+                  }
+
+                  const statusData = await statusResponse.json();
+                  console.log(`Video ${videoNumber} status:`, statusData.status || statusData.state);
+                  
+                  if (statusData.status === 'SUCCEEDED' || statusData.state === 'completed' || statusData.url) {
+                    videoReady = true;
+                    completedVideos++;
+                    setVideoGenerationProgress((completedVideos / totalVideos) * 100);
+                    
+                    const newVideo = {
+                      id: `${promptIndex}-${videoNumber}`,
+                      promptIndex,
+                      videoNumber,
+                      videoUrl: statusData.url || statusData.output?.[0] || statusData.output,
+                      prompt: prompt,
+                      translatedPrompt: englishPrompt,
+                      status: 'completed'
+                    };
+                    
+                    setGeneratedVideos(prev => [...prev, newVideo]);
+                    console.log('Video completed successfully:', newVideo);
+                    
+                  } else if (statusData.status === 'FAILED' || statusData.state === 'failed') {
+                    throw new Error(`Video generation failed: ${statusData.failure_reason || statusData.error || 'Unknown error'}`);
+                  } else {
+                    console.log(`Video ${videoNumber} still processing... (attempt ${attempts + 1})`);
+                  }
+                  
                   attempts++;
-                  continue;
+                } catch (pollError) {
+                  console.error(`Error polling status for video ${videoNumber}:`, pollError);
+                  attempts++;
                 }
-
-                const statusData = await statusResponse.json();
-                console.log(`Video ${videoNumber} status:`, statusData.status);
-                
-                if (statusData.status === 'SUCCEEDED') {
-                  videoReady = true;
-                  completedVideos++;
-                  setVideoGenerationProgress((completedVideos / totalVideos) * 100);
-                  
-                  const newVideo = {
-                    id: `${promptIndex}-${videoNumber}`,
-                    promptIndex,
-                    videoNumber,
-                    videoUrl: statusData.output?.[0] || statusData.output,
-                    prompt: prompt,
-                    translatedPrompt: englishPrompt,
-                    status: 'completed'
-                  };
-                  
-                  setGeneratedVideos(prev => [...prev, newVideo]);
-                  console.log('Video completed successfully:', newVideo);
-                  
-                } else if (statusData.status === 'FAILED') {
-                  throw new Error(`Video generation failed: ${statusData.failure_reason || statusData.error || 'Unknown error'}`);
-                } else if (statusData.status === 'RUNNING' || statusData.status === 'PENDING') {
-                  console.log(`Video ${videoNumber} still processing... (attempt ${attempts + 1})`);
-                }
-                
-                attempts++;
-              } catch (pollError) {
-                console.error(`Error polling status for video ${videoNumber}:`, pollError);
-                attempts++;
               }
-            }
 
-            if (!videoReady) {
-              throw new Error(`Video generation timed out for prompt ${promptIndex + 1}, video ${videoNumber}`);
+              if (!videoReady) {
+                throw new Error(`Video generation timed out for prompt ${promptIndex + 1}, video ${videoNumber}`);
+              }
+            } else {
+              throw new Error('Unexpected API response format');
             }
 
           } catch (error) {
