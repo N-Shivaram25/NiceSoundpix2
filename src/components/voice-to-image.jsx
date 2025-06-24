@@ -445,8 +445,8 @@ const VoiceToImage = () => {
           try {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
-            // Runway ML Text-to-Video API call - using v2 endpoint
-            const response = await fetch('https://api.runwayml.com/v2/generate', {
+            // Runway ML Text-to-Video API call - using runway.team v1 endpoint
+            const response = await fetch('https://api.runway.team/v1/generate', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
@@ -522,7 +522,7 @@ const VoiceToImage = () => {
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
                 
                 try {
-                  const statusResponse = await fetch(`https://api.runwayml.com/v2/tasks/${taskId}`, {
+                  const statusResponse = await fetch(`https://api.runway.team/v1/tasks/${taskId}`, {
                     headers: {
                       'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
                       'Content-Type': 'application/json'
