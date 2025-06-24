@@ -4,7 +4,7 @@ import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognitio
 import '../App.css';
 
 const VoiceToImage = () => {
-  const [currentMode, setCurrentMode] = useState('single'); // 'single' or 'saga'
+  const [currentMode, setCurrentMode] = useState('single'); // 'single', 'saga', or 'video'
   const [imageSets, setImageSets] = useState([{id: 0, images: [null, null, null], prompt: '', language: 'en-IN'}]);
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
@@ -25,6 +25,13 @@ const VoiceToImage = () => {
   const [isPlayingStory, setIsPlayingStory] = useState(false);
   const [sagaProjects, setSagaProjects] = useState([]);
   
+  // Video mode specific states
+  const [videoPrompts, setVideoPrompts] = useState([]);
+  const [generatedVideos, setGeneratedVideos] = useState([]);
+  const [videoProjects, setVideoProjects] = useState([]);
+  const [isGeneratingVideos, setIsGeneratingVideos] = useState(false);
+  const [videoGenerationProgress, setVideoGenerationProgress] = useState(0);
+  
   const [pauseDetectionTimeout, setPauseDetectionTimeout] = useState(null);
   const [stopRecordingTimeout, setStopRecordingTimeout] = useState(null);
   const [showAddSceneModal, setShowAddSceneModal] = useState(false);
@@ -40,6 +47,7 @@ const VoiceToImage = () => {
 
   const currentSet = imageSets[currentSetIndex];
   const CLIPDROP_API_KEY = '365439e8863868b2d2d7cd6fa7ad12501cb00156468a57f65f489c60922e831a37575c0d9762a4519a5d306f657697e2';
+  const RUNWAY_ML_API_KEY = 'your-runway-ml-api-key-here'; // Replace with your actual Runway ML API key
 
   useEffect(() => {
     // Auto-detect language based on browser settings
@@ -53,9 +61,9 @@ const VoiceToImage = () => {
     }
   }, []);
 
-  // Enhanced pause detection for saga mode with improved timing
+  // Enhanced pause detection for saga and video modes with improved timing
   useEffect(() => {
-    if (isListening && currentMode === 'saga') {
+    if (isListening && (currentMode === 'saga' || currentMode === 'video')) {
       // Clear previous timeouts
       if (pauseDetectionTimeout) {
         clearTimeout(pauseDetectionTimeout);
@@ -68,15 +76,26 @@ const VoiceToImage = () => {
         // 2-second pause detection for scene cutting (Scene 2, 3, etc.)
         const pauseTimeout = setTimeout(() => {
           if (transcript.trim()) {
-            const currentScene = transcript.trim();
-            console.log(`Scene cut after 2-second pause - Adding Scene ${sagaStory.length + 1}:`, currentScene);
-            setSagaStory(prev => {
-              // Avoid duplicates by checking last scene
-              if (prev.length === 0 || prev[prev.length - 1].trim() !== currentScene.trim()) {
-                return [...prev, currentScene];
-              }
-              return prev;
-            });
+            const currentPrompt = transcript.trim();
+            if (currentMode === 'saga') {
+              console.log(`Scene cut after 2-second pause - Adding Scene ${sagaStory.length + 1}:`, currentPrompt);
+              setSagaStory(prev => {
+                // Avoid duplicates by checking last scene
+                if (prev.length === 0 || prev[prev.length - 1].trim() !== currentPrompt.trim()) {
+                  return [...prev, currentPrompt];
+                }
+                return prev;
+              });
+            } else if (currentMode === 'video') {
+              console.log(`Video prompt cut after 2-second pause - Adding Prompt ${videoPrompts.length + 1}:`, currentPrompt);
+              setVideoPrompts(prev => {
+                // Avoid duplicates by checking last prompt
+                if (prev.length === 0 || prev[prev.length - 1].trim() !== currentPrompt.trim()) {
+                  return [...prev, currentPrompt];
+                }
+                return prev;
+              });
+            }
             resetTranscript();
           }
         }, 2000);
@@ -84,18 +103,30 @@ const VoiceToImage = () => {
         // 5-second pause detection for stopping recording completely
         const stopTimeout = setTimeout(() => {
           if (transcript.trim()) {
-            const currentScene = transcript.trim();
-            console.log('Final scene before stopping recording:', currentScene);
-            setSagaStory(prev => {
-              // Add final scene if different
-              if (prev.length === 0 || prev[prev.length - 1].trim() !== currentScene.trim()) {
-                return [...prev, currentScene];
-              }
-              return prev;
-            });
+            const currentPrompt = transcript.trim();
+            if (currentMode === 'saga') {
+              console.log('Final scene before stopping recording:', currentPrompt);
+              setSagaStory(prev => {
+                // Add final scene if different
+                if (prev.length === 0 || prev[prev.length - 1].trim() !== currentPrompt.trim()) {
+                  return [...prev, currentPrompt];
+                }
+                return prev;
+              });
+              console.log('Recording stopped after 5-second pause - Total scenes:', sagaStory.length + 1);
+            } else if (currentMode === 'video') {
+              console.log('Final video prompt before stopping recording:', currentPrompt);
+              setVideoPrompts(prev => {
+                // Add final prompt if different
+                if (prev.length === 0 || prev[prev.length - 1].trim() !== currentPrompt.trim()) {
+                  return [...prev, currentPrompt];
+                }
+                return prev;
+              });
+              console.log('Recording stopped after 5-second pause - Total prompts:', videoPrompts.length + 1);
+            }
             resetTranscript();
           }
-          console.log('Recording stopped after 5-second pause - Total scenes:', sagaStory.length + 1);
           stopListening();
         }, 5000);
 
@@ -379,6 +410,126 @@ const VoiceToImage = () => {
     }
   };
 
+  const generateVideosFromPrompts = async () => {
+    if (videoPrompts.length === 0) {
+      setError('Please record video prompts first.');
+      return;
+    }
+
+    setIsGeneratingVideos(true);
+    setError(null);
+    setGeneratedVideos([]);
+    setVideoGenerationProgress(0);
+
+    try {
+      const totalVideos = videoPrompts.length * 3; // 3 videos per prompt
+      let completedVideos = 0;
+
+      const videoPromises = videoPrompts.map(async (prompt, promptIndex) => {
+        const englishPrompt = await translateToEnglish(prompt, language);
+        
+        // Generate 3 videos for each prompt
+        const videosForPrompt = await Promise.all([1, 2, 3].map(async (videoNumber) => {
+          try {
+            // Runway ML Text-to-Video API call
+            const response = await fetch('https://api.runwayml.com/v1/video_generations', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                text_prompt: englishPrompt,
+                duration: 4, // 4 seconds video
+                resolution: '1280x768',
+                motion_bucket_id: 127,
+                fps: 24,
+                seed: Math.floor(Math.random() * 1000000)
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(`Failed to generate video ${videoNumber} for prompt ${promptIndex + 1}: ${errorData.message || 'Unknown error'}`);
+            }
+
+            const data = await response.json();
+            const videoId = data.id;
+
+            // Poll for video completion
+            let videoReady = false;
+            let attempts = 0;
+            const maxAttempts = 60; // 5 minutes maximum wait time
+            
+            while (!videoReady && attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+              
+              const statusResponse = await fetch(`https://api.runwayml.com/v1/video_generations/${videoId}`, {
+                headers: {
+                  'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
+                },
+              });
+
+              const statusData = await statusResponse.json();
+              
+              if (statusData.status === 'SUCCEEDED') {
+                videoReady = true;
+                completedVideos++;
+                setVideoGenerationProgress((completedVideos / totalVideos) * 100);
+                
+                return {
+                  id: `${promptIndex}-${videoNumber}`,
+                  promptIndex,
+                  videoNumber,
+                  videoUrl: statusData.output[0],
+                  prompt: prompt,
+                  translatedPrompt: englishPrompt,
+                  status: 'completed'
+                };
+              } else if (statusData.status === 'FAILED') {
+                throw new Error(`Video generation failed: ${statusData.failure_reason || 'Unknown error'}`);
+              }
+              
+              attempts++;
+            }
+
+            if (!videoReady) {
+              throw new Error(`Video generation timed out for prompt ${promptIndex + 1}, video ${videoNumber}`);
+            }
+
+          } catch (error) {
+            console.error(`Error generating video ${videoNumber} for prompt ${promptIndex + 1}:`, error);
+            completedVideos++;
+            setVideoGenerationProgress((completedVideos / totalVideos) * 100);
+            
+            return {
+              id: `${promptIndex}-${videoNumber}`,
+              promptIndex,
+              videoNumber,
+              videoUrl: null,
+              prompt: prompt,
+              translatedPrompt: englishPrompt,
+              status: 'failed',
+              error: error.message
+            };
+          }
+        }));
+
+        return videosForPrompt;
+      });
+
+      const allVideos = await Promise.all(videoPromises);
+      const flattenedVideos = allVideos.flat();
+      setGeneratedVideos(flattenedVideos);
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsGeneratingVideos(false);
+      setVideoGenerationProgress(0);
+    }
+  };
+
   const handleGenerate = () => {
     if (currentMode === 'saga') {
       if (sagaStory.length === 0) {
@@ -386,6 +537,12 @@ const VoiceToImage = () => {
         return;
       }
       generateSagaImages();
+    } else if (currentMode === 'video') {
+      if (videoPrompts.length === 0) {
+        alert('Please record video prompts first by speaking into the microphone.');
+        return;
+      }
+      generateVideosFromPrompts();
     } else {
       const textToUse = finalTranscript || transcript;
       
@@ -437,13 +594,23 @@ const VoiceToImage = () => {
     SpeechRecognition.stopListening();
     setIsListening(false);
     
-    // Capture any remaining transcript as final for saga mode only if it's different
+    // Capture any remaining transcript as final for saga and video modes only if it's different
     if (transcript && transcript.trim() && currentMode === 'saga') {
       const currentScene = transcript.trim();
       setSagaStory(prev => {
         // Only add if it's different from the last scene
         if (prev.length === 0 || prev[prev.length - 1] !== currentScene) {
           return [...prev, currentScene];
+        }
+        return prev;
+      });
+      resetTranscript();
+    } else if (transcript && transcript.trim() && currentMode === 'video') {
+      const currentPrompt = transcript.trim();
+      setVideoPrompts(prev => {
+        // Only add if it's different from the last prompt
+        if (prev.length === 0 || prev[prev.length - 1] !== currentPrompt) {
+          return [...prev, currentPrompt];
         }
         return prev;
       });
@@ -480,6 +647,24 @@ const VoiceToImage = () => {
 
     setSagaProjects([...sagaProjects, project]);
     alert('Saga project saved successfully!');
+  };
+
+  const saveVideoProject = () => {
+    if (videoPrompts.length === 0 || generatedVideos.length === 0) {
+      alert('Please generate videos first.');
+      return;
+    }
+
+    const project = {
+      id: Date.now(),
+      name: `Video Project ${videoProjects.length + 1}`,
+      prompts: videoPrompts,
+      videos: generatedVideos,
+      createdAt: new Date().toLocaleDateString()
+    };
+
+    setVideoProjects([...videoProjects, project]);
+    alert('Video project saved successfully!');
   };
 
   const playStory = () => {
@@ -596,8 +781,11 @@ const VoiceToImage = () => {
           >
             <i className="fas fa-book"></i> Voice to Saga Mode
           </button>
-          <button className="nav-button" onClick={() => alert('Voice to Video feature coming soon!')}>
-            <i className="fas fa-video"></i> Voice to Video Generate
+          <button 
+            className={`nav-button ${currentMode === 'video' ? 'active' : ''}`}
+            onClick={() => setCurrentMode('video')}
+          >
+            <i className="fas fa-video"></i> Voice to Video Mode
           </button>
           <button className="nav-button" onClick={() => alert('Custom design feature coming soon!')}>
             <i className="fas fa-palette"></i> Your Design
@@ -618,7 +806,7 @@ const VoiceToImage = () => {
       </button>
 
       <div className={`history-sidebar ${showHistory ? 'open' : ''}`}>
-        <h3>{currentMode === 'saga' ? 'Saga Projects' : 'Generation History'}</h3>
+        <h3>{currentMode === 'saga' ? 'Saga Projects' : currentMode === 'video' ? 'Video Projects' : 'Generation History'}</h3>
         <ul>
           {currentMode === 'saga' ? (
             sagaProjects.map((project, idx) => (
@@ -626,6 +814,18 @@ const VoiceToImage = () => {
                 <button onClick={() => {
                   setSagaStory(project.story);
                   setSagaImages(project.images);
+                }}>
+                  {project.name}
+                  <span className="date-tag">{project.createdAt}</span>
+                </button>
+              </li>
+            ))
+          ) : currentMode === 'video' ? (
+            videoProjects.map((project, idx) => (
+              <li key={project.id}>
+                <button onClick={() => {
+                  setVideoPrompts(project.prompts);
+                  setGeneratedVideos(project.videos);
                 }}>
                   {project.name}
                   <span className="date-tag">{project.createdAt}</span>
@@ -652,12 +852,15 @@ const VoiceToImage = () => {
       <div className="main-content">
         <h1 className="main-title">
           Sound Pix <span className="gradient-text">
-            {currentMode === 'saga' ? 'Voice to Saga' : 'Voice to Image'}
+            {currentMode === 'saga' ? 'Voice to Saga' : 
+             currentMode === 'video' ? 'Voice to Video' : 'Voice to Image'}
           </span>
         </h1>
         <p>
           {currentMode === 'saga' 
             ? 'Tell a story and watch it come to life through AI-generated images'
+            : currentMode === 'video'
+            ? 'Describe your video scenes verbally and generate AI videos with Runway ML'
             : 'Describe your image verbally, then generate visual magic'
           }
         </p>
@@ -886,6 +1089,157 @@ const VoiceToImage = () => {
               </div>
             )}
           </div>
+        ) : currentMode === 'video' ? (
+          // Video Mode UI
+          <div className="video-mode">
+            <div className="voice-container">
+              <div className={`voice-animation ${isListening ? 'active' : ''}`}>
+                <div className="wave"></div>
+                <div className="wave"></div>
+                <div className="wave"></div>
+                <div className="mic-icon">
+                  <i className="fas fa-microphone"></i>
+                </div>
+              </div>
+
+              <div className="transcript-box">
+                <div className="current-language-indicator">
+                  <i className="fas fa-globe"></i> 
+                  {language === 'en-IN' ? 'English' : 
+                   language === 'hi-IN' ? 'हिंदी' : 
+                   language === 'te-IN' ? 'తెలుగు' : 'English'}
+                </div>
+                {videoPrompts.length > 0 ? (
+                  <div className="video-prompts-preview">
+                    <h4>Your Video Prompts ({videoPrompts.length} prompts):</h4>
+                    {videoPrompts.map((prompt, index) => (
+                      <div key={index} className="video-prompt">
+                        <span className="prompt-number">Prompt {index + 1}:</span>
+                        <span className="prompt-text">{prompt}</span>
+                      </div>
+                    ))}
+                    {isListening && transcript && (
+                      <div className="current-prompt">
+                        <span className="prompt-number">Prompt {videoPrompts.length + 1} (Recording...):</span>
+                        <span className="prompt-text">{transcript}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  transcript || (isListening ? 'Describe your video scenes... Pause for 2 seconds between prompts, 5 seconds to stop recording.' : 'Your video prompts will appear here as you speak')
+                )}
+              </div>
+            </div>
+
+            <div className="video-controls">
+              <button 
+                onClick={isListening ? stopListening : startListening} 
+                className={`voice-button ${isListening ? 'listening' : ''}`}
+              >
+                <i className={`fas fa-${isListening ? 'microphone-slash' : 'microphone'}`}></i>
+                {isListening ? 'Stop Recording' : 'Start Recording Prompts'}
+              </button>
+
+              {videoPrompts.length > 0 && (
+                <>
+                  <button 
+                    onClick={handleGenerate} 
+                    disabled={isGeneratingVideos}
+                    className="generate-button"
+                  >
+                    <i className="fas fa-video"></i> 
+                    {isGeneratingVideos ? 'Generating Videos...' : 'Generate Videos (3 per prompt)'}
+                  </button>
+
+                  {generatedVideos.length > 0 && (
+                    <button onClick={saveVideoProject} className="save-button">
+                      <i className="fas fa-save"></i> Save Video Project
+                    </button>
+                  )}
+                </>
+              )}
+
+              <button onClick={() => {
+                resetTranscript();
+                setVideoPrompts([]);
+                setGeneratedVideos([]);
+              }} disabled={isGeneratingVideos}>
+                <i className="fas fa-eraser"></i> Clear All
+              </button>
+            </div>
+
+            {/* Video Generation Progress */}
+            {isGeneratingVideos && (
+              <div className="video-generation-progress">
+                <h4>Generating Videos...</h4>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{ width: `${videoGenerationProgress}%` }}
+                  ></div>
+                </div>
+                <p>{Math.round(videoGenerationProgress)}% Complete</p>
+              </div>
+            )}
+
+            {/* Generated Videos Display */}
+            {generatedVideos.length > 0 && (
+              <div className="generated-videos">
+                <h3>
+                  <i className="fas fa-video"></i> Generated Videos
+                </h3>
+                <div className="videos-grid">
+                  {videoPrompts.map((prompt, promptIndex) => {
+                    const promptVideos = generatedVideos.filter(v => v.promptIndex === promptIndex);
+                    return (
+                      <div key={promptIndex} className="prompt-videos-group">
+                        <h4>Prompt {promptIndex + 1}: {prompt}</h4>
+                        <div className="videos-row">
+                          {promptVideos.map((videoData, videoIndex) => (
+                            <div key={videoData.id} className="video-card">
+                              <div className="video-number-badge">Video {videoData.videoNumber}</div>
+                              {videoData.status === 'completed' && videoData.videoUrl ? (
+                                <video 
+                                  controls 
+                                  width="300" 
+                                  height="200"
+                                  src={videoData.videoUrl}
+                                >
+                                  Your browser does not support the video tag.
+                                </video>
+                              ) : videoData.status === 'failed' ? (
+                                <div className="video-error">
+                                  <i className="fas fa-exclamation-triangle"></i>
+                                  <p>Failed to generate</p>
+                                  <small>{videoData.error}</small>
+                                </div>
+                              ) : (
+                                <div className="video-loading">
+                                  <i className="fas fa-spinner fa-spin"></i>
+                                  <p>Generating...</p>
+                                </div>
+                              )}
+                              <div className="video-actions">
+                                {videoData.videoUrl && (
+                                  <a 
+                                    href={videoData.videoUrl} 
+                                    download={`video_${promptIndex + 1}_${videoData.videoNumber}.mp4`}
+                                    className="download-btn"
+                                  >
+                                    <i className="fas fa-download"></i>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           // Original Single Image Mode UI
           <>
@@ -1011,10 +1365,14 @@ const VoiceToImage = () => {
           </>
         )}
 
-        {isLoading && (
+        {(isLoading || isGeneratingVideos) && (
           <div className="loading">
             <div className="spinner"></div>
-            <p>{currentMode === 'saga' ? 'Creating your story images...' : 'Creating your images...'}</p>
+            <p>
+              {currentMode === 'saga' ? 'Creating your story images...' : 
+               currentMode === 'video' ? 'Creating your videos with Runway ML...' :
+               'Creating your images...'}
+            </p>
           </div>
         )}
 
