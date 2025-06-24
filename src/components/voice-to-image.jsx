@@ -47,7 +47,7 @@ const VoiceToImage = () => {
 
   const currentSet = imageSets[currentSetIndex];
   const CLIPDROP_API_KEY = '365439e8863868b2d2d7cd6fa7ad12501cb00156468a57f65f489c60922e831a37575c0d9762a4519a5d306f657697e2';
-  const RUNWAY_ML_API_KEY = process.env.REACT_APP_RUNWAY_ML_API_KEY || 'your-runway-ml-api-key-here'; // Replace with your actual Runway ML API key
+  const RUNWAY_ML_API_KEY = process.env.REACT_APP_RUNWAY_ML_API_KEY || 'key_954abfe1e4cbadd938b80b7de6e9e06c0af7aae23d9101ac0a1bfc3ecc5873b2dff12be4abf775a9d4f224ee57674beaf5fb8cadcc60ada01791eea736d53384'; // Replace with your actual Runway ML API key
 
   useEffect(() => {
     // Auto-detect language based on browser settings
