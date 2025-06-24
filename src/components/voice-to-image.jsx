@@ -445,31 +445,45 @@ const VoiceToImage = () => {
           try {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
-            // Runway ML Text-to-Video API call
-            const response = await fetch('https://api.runwayml.com/v1/gen2', {
+            // Runway ML Text-to-Video API call - using correct endpoint
+            const response = await fetch('https://api.runwayml.com/v1/image_to_video', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                prompt: englishPrompt
+                model: 'gen3a_turbo',
+                prompt_text: englishPrompt,
+                duration: 5,
+                ratio: '16:9',
+                seed: Math.floor(Math.random() * 1000000)
               }),
             });
 
             console.log(`API Response status: ${response.status}`);
+            console.log(`API Response headers:`, Object.fromEntries(response.headers.entries()));
             
             if (!response.ok) {
-              const errorText = await response.text();
-              console.error(`API Error Response: ${errorText}`);
+              let errorText;
+              try {
+                errorText = await response.text();
+                console.error(`API Error Response: ${errorText}`);
+              } catch (e) {
+                errorText = 'Unable to read error response';
+              }
               
               // Handle specific error cases
               if (response.status === 401) {
                 throw new Error('Invalid API key. Please check your Runway ML API key.');
+              } else if (response.status === 404) {
+                throw new Error('API endpoint not found. Please check if you have access to Runway ML Gen-3 API.');
               } else if (response.status === 429) {
                 throw new Error('Rate limit exceeded. Please wait and try again.');
               } else if (response.status === 402) {
                 throw new Error('Insufficient credits. Please add credits to your Runway ML account.');
+              } else if (response.status === 400) {
+                throw new Error(`Bad request: ${errorText}. Please check your prompt and parameters.`);
               } else {
                 throw new Error(`API Error: ${response.status} - ${errorText}`);
               }
@@ -508,7 +522,7 @@ const VoiceToImage = () => {
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
                 
                 try {
-                  const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}`, {
+                  const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}/status`, {
                     headers: {
                       'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
                       'Content-Type': 'application/json'
