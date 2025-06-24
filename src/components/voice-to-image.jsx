@@ -34,7 +34,8 @@ const VoiceToImage = () => {
   const { transcript, finalTranscript: speechFinalTranscript, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition({
     transcribing: true,
     clearTranscriptOnListen: false,
-    continuous: true
+    continuous: true,
+    interimResults: true
   });
 
   const currentSet = imageSets[currentSetIndex];
@@ -52,11 +53,9 @@ const VoiceToImage = () => {
     }
   }, []);
 
-  // Handle speech completion with pause detection for saga mode
+  // Enhanced pause detection for saga mode with improved timing
   useEffect(() => {
-    if (isListening && currentMode === 'saga' && transcript) {
-      
-      
+    if (isListening && currentMode === 'saga') {
       // Clear previous timeouts
       if (pauseDetectionTimeout) {
         clearTimeout(pauseDetectionTimeout);
@@ -65,52 +64,56 @@ const VoiceToImage = () => {
         clearTimeout(stopRecordingTimeout);
       }
 
-      // 2-second pause detection for scene cutting
-      const pauseTimeout = setTimeout(() => {
-        if (transcript.trim()) {
-          const currentScene = transcript.trim();
-          console.log('Scene cut after 2-second pause:', currentScene);
-          setSagaStory(prev => {
-            // Avoid duplicates
-            if (prev.length === 0 || prev[prev.length - 1] !== currentScene) {
-              return [...prev, currentScene];
-            }
-            return prev;
-          });
-          resetTranscript();
-        }
-      }, 2000);
+      if (transcript && transcript.trim()) {
+        // 2-second pause detection for scene cutting (Scene 2, 3, etc.)
+        const pauseTimeout = setTimeout(() => {
+          if (transcript.trim()) {
+            const currentScene = transcript.trim();
+            console.log(`Scene cut after 2-second pause - Adding Scene ${sagaStory.length + 1}:`, currentScene);
+            setSagaStory(prev => {
+              // Avoid duplicates by checking last scene
+              if (prev.length === 0 || prev[prev.length - 1].trim() !== currentScene.trim()) {
+                return [...prev, currentScene];
+              }
+              return prev;
+            });
+            resetTranscript();
+          }
+        }, 2000);
 
-      // 5-second pause detection for stopping recording
-      const stopTimeout = setTimeout(() => {
-        if (transcript.trim()) {
-          const currentScene = transcript.trim();
-          setSagaStory(prev => {
-            // Avoid duplicates
-            if (prev.length === 0 || prev[prev.length - 1] !== currentScene) {
-              return [...prev, currentScene];
-            }
-            return prev;
-          });
-          resetTranscript();
-        }
-        stopListening();
-        console.log('Recording stopped after 5-second pause');
-      }, 5000);
+        // 5-second pause detection for stopping recording completely
+        const stopTimeout = setTimeout(() => {
+          if (transcript.trim()) {
+            const currentScene = transcript.trim();
+            console.log('Final scene before stopping recording:', currentScene);
+            setSagaStory(prev => {
+              // Add final scene if different
+              if (prev.length === 0 || prev[prev.length - 1].trim() !== currentScene.trim()) {
+                return [...prev, currentScene];
+              }
+              return prev;
+            });
+            resetTranscript();
+          }
+          console.log('Recording stopped after 5-second pause - Total scenes:', sagaStory.length + 1);
+          stopListening();
+        }, 5000);
 
-      setPauseDetectionTimeout(pauseTimeout);
-      setStopRecordingTimeout(stopTimeout);
+        setPauseDetectionTimeout(pauseTimeout);
+        setStopRecordingTimeout(stopTimeout);
+      }
     } else if (transcript && isListening && currentMode === 'single') {
-      // Original single mode logic
+      // Enhanced single mode logic with better speech completion detection
       if (speechTimeout) {
         clearTimeout(speechTimeout);
       }
 
       const timeout = setTimeout(() => {
         if (transcript.trim()) {
+          console.log('Single mode - Final transcript captured:', transcript.trim());
           setFinalTranscript(transcript.trim());
         }
-      }, 2000);
+      }, 1500); // Reduced to 1.5 seconds for better responsiveness
 
       setSpeechTimeout(timeout);
     }
@@ -126,7 +129,7 @@ const VoiceToImage = () => {
         clearTimeout(speechTimeout);
       }
     };
-  }, [transcript, isListening, currentMode, pauseDetectionTimeout, stopRecordingTimeout, speechTimeout]);
+  }, [transcript, isListening, currentMode, sagaStory.length]);
 
   // Handle final transcript from speech recognition
   useEffect(() => {
@@ -151,11 +154,16 @@ const VoiceToImage = () => {
     setIsAddingVoiceScene(true);
     setNewSceneText('');
     resetTranscript();
-    SpeechRecognition.startListening({ 
+    
+    const speechConfig = {
       continuous: true,
       language: language,
-      interimResults: true
-    });
+      interimResults: true,
+      maxAlternatives: 3
+    };
+    
+    console.log(`Starting voice scene recording with language: ${language}`);
+    SpeechRecognition.startListening(speechConfig);
   };
 
   const stopVoiceSceneRecording = () => {
@@ -168,50 +176,74 @@ const VoiceToImage = () => {
   };
 
   const translateToEnglish = async (text, sourceLang) => {
-    if (sourceLang === 'en-IN') {
+    if (sourceLang === 'en-IN' || sourceLang === 'en-US') {
       return text; // Already in English
     }
 
-    // Clean and prepare text for better translation
-    const cleanText = text.trim().replace(/\s+/g, ' ');
+    // Enhanced text cleaning for better translation
+    const cleanText = text.trim()
+      .replace(/\s+/g, ' ')
+      .replace(/[^\w\s\u0900-\u097F\u0C00-\u0C7F]/g, '') // Keep only alphanumeric, Telugu, Hindi chars
+      .trim();
     
-    if (!cleanText) {
+    if (!cleanText || cleanText.length < 2) {
       return text;
     }
 
     try {
-      // Try multiple translation services for better accuracy
-      const translationPromises = [
-        // MyMemory API (primary)
-        fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanText)}&langpair=${sourceLang.split('-')[0]}|en`)
-          .then(res => res.json())
-          .then(data => data.responseStatus === 200 ? data.responseData.translatedText : null),
+      // Enhanced translation with multiple services and retry logic
+      const translationServices = [
+        // Google Translate API (via unofficial endpoint)
+        async () => {
+          const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang.split('-')[0]}&tl=en&dt=t&q=${encodeURIComponent(cleanText)}`);
+          const result = await response.json();
+          return result[0]?.[0]?.[0] || null;
+        },
         
-        // LibreTranslate (backup)
-        fetch('https://libretranslate.de/translate', {
-          method: 'POST',
-          body: JSON.stringify({
-            q: cleanText,
-            source: sourceLang.split('-')[0],
-            target: 'en',
-            format: 'text'
-          }),
-          headers: { 'Content-Type': 'application/json' }
-        })
-          .then(res => res.json())
-          .then(data => data.translatedText)
-          .catch(() => null)
+        // MyMemory API with enhanced parameters
+        async () => {
+          const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanText)}&langpair=${sourceLang.split('-')[0]}|en&de=your-email@example.com`);
+          const data = await response.json();
+          if (data.responseStatus === 200 && data.responseData.match > 0.7) {
+            return data.responseData.translatedText;
+          }
+          return null;
+        },
+        
+        // LibreTranslate with error handling
+        async () => {
+          const response = await fetch('https://libretranslate.de/translate', {
+            method: 'POST',
+            body: JSON.stringify({
+              q: cleanText,
+              source: sourceLang.split('-')[0] === 'te' ? 'te' : 'hi',
+              target: 'en',
+              format: 'text'
+            }),
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await response.json();
+          return data.translatedText || null;
+        }
       ];
 
-      const results = await Promise.allSettled(translationPromises);
-      
-      // Use the first successful translation
-      for (const result of results) {
-        if (result.status === 'fulfilled' && result.value && result.value.trim()) {
-          const translated = result.value.trim();
-          console.log(`Original (${sourceLang}): ${cleanText}`);
-          console.log(`Translated: ${translated}`);
-          return translated;
+      // Try each service with timeout
+      for (const service of translationServices) {
+        try {
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Translation timeout')), 5000)
+          );
+          
+          const result = await Promise.race([service(), timeoutPromise]);
+          
+          if (result && result.trim() && result.trim() !== cleanText) {
+            const translated = result.trim();
+            console.log(`Translation successful - Original (${sourceLang}): "${cleanText}" → "${translated}"`);
+            return translated;
+          }
+        } catch (serviceError) {
+          console.warn('Translation service failed:', serviceError.message);
+          continue;
         }
       }
 
@@ -380,14 +412,25 @@ const VoiceToImage = () => {
 
   const startListening = () => {
     resetTranscript();
-    SpeechRecognition.startListening({ 
+    
+    // Enhanced speech recognition configuration for better accuracy
+    const speechConfig = {
       continuous: true,
       language: language,
-      interimResults: true
-    });
+      interimResults: true,
+      maxAlternatives: 3, // Get multiple recognition alternatives
+      grammars: undefined // Let browser use default grammar for better accuracy
+    };
+    
+    console.log(`Starting speech recognition with language: ${language}`);
+    SpeechRecognition.startListening(speechConfig);
     setIsListening(true);
     setFinalTranscript('');
-    // Don't reset saga story when starting listening, only when explicitly clearing
+    
+    // Clear any existing timeouts
+    if (pauseDetectionTimeout) clearTimeout(pauseDetectionTimeout);
+    if (stopRecordingTimeout) clearTimeout(stopRecordingTimeout);
+    if (speechTimeout) clearTimeout(speechTimeout);
   };
 
   const stopListening = () => {
