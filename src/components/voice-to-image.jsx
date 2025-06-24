@@ -24,7 +24,7 @@ const VoiceToImage = () => {
   const [isEditingStory, setIsEditingStory] = useState(false);
   const [isPlayingStory, setIsPlayingStory] = useState(false);
   const [sagaProjects, setSagaProjects] = useState([]);
-  const [lastTranscriptTime, setLastTranscriptTime] = useState(Date.now());
+  
   const [pauseDetectionTimeout, setPauseDetectionTimeout] = useState(null);
   const [stopRecordingTimeout, setStopRecordingTimeout] = useState(null);
   const [showAddSceneModal, setShowAddSceneModal] = useState(false);
@@ -54,8 +54,8 @@ const VoiceToImage = () => {
 
   // Handle speech completion with pause detection for saga mode
   useEffect(() => {
-    if (transcript && isListening && currentMode === 'saga') {
-      setLastTranscriptTime(Date.now());
+    if (isListening && currentMode === 'saga' && transcript) {
+      
       
       // Clear previous timeouts
       if (pauseDetectionTimeout) {
@@ -69,9 +69,15 @@ const VoiceToImage = () => {
       const pauseTimeout = setTimeout(() => {
         if (transcript.trim()) {
           const currentScene = transcript.trim();
-          setSagaStory(prev => [...prev, currentScene]);
-          resetTranscript();
           console.log('Scene cut after 2-second pause:', currentScene);
+          setSagaStory(prev => {
+            // Avoid duplicates
+            if (prev.length === 0 || prev[prev.length - 1] !== currentScene) {
+              return [...prev, currentScene];
+            }
+            return prev;
+          });
+          resetTranscript();
         }
       }, 2000);
 
@@ -79,7 +85,14 @@ const VoiceToImage = () => {
       const stopTimeout = setTimeout(() => {
         if (transcript.trim()) {
           const currentScene = transcript.trim();
-          setSagaStory(prev => [...prev, currentScene]);
+          setSagaStory(prev => {
+            // Avoid duplicates
+            if (prev.length === 0 || prev[prev.length - 1] !== currentScene) {
+              return [...prev, currentScene];
+            }
+            return prev;
+          });
+          resetTranscript();
         }
         stopListening();
         console.log('Recording stopped after 5-second pause');
@@ -113,25 +126,17 @@ const VoiceToImage = () => {
         clearTimeout(speechTimeout);
       }
     };
-  }, [transcript, isListening, currentMode]);
+  }, [transcript, isListening, currentMode, pauseDetectionTimeout, stopRecordingTimeout, speechTimeout]);
 
   // Handle final transcript from speech recognition
   useEffect(() => {
-    if (speechFinalTranscript && speechFinalTranscript.trim()) {
-      if (currentMode === 'saga') {
-        handleSagaTranscript(speechFinalTranscript.trim());
-      } else {
-        setFinalTranscript(speechFinalTranscript.trim());
-      }
+    if (speechFinalTranscript && speechFinalTranscript.trim() && currentMode === 'single') {
+      setFinalTranscript(speechFinalTranscript.trim());
     }
+    // For saga mode, we handle transcripts through the pause detection logic only
   }, [speechFinalTranscript, currentMode]);
 
-  const handleSagaTranscript = (text) => {
-    // This is now handled by pause detection, but keeping for manual transcript processing
-    const sentences = text.split(/[.?!]+/).filter(sentence => sentence.trim().length > 0);
-    const cleanedSentences = sentences.map(sentence => sentence.trim());
-    setSagaStory(cleanedSentences);
-  };
+  
 
   const addNewScene = (sceneText) => {
     if (sceneText.trim()) {
@@ -382,23 +387,26 @@ const VoiceToImage = () => {
     });
     setIsListening(true);
     setFinalTranscript('');
-    if (currentMode === 'saga') {
-      setSagaStory([]);
-    }
+    // Don't reset saga story when starting listening, only when explicitly clearing
   };
 
   const stopListening = () => {
     SpeechRecognition.stopListening();
     setIsListening(false);
     
-    // Capture any remaining transcript as final
-    if (transcript && transcript.trim()) {
-      if (currentMode === 'saga') {
-        setSagaStory(prev => [...prev, transcript.trim()]);
-        resetTranscript();
-      } else {
-        setFinalTranscript(transcript.trim());
-      }
+    // Capture any remaining transcript as final for saga mode only if it's different
+    if (transcript && transcript.trim() && currentMode === 'saga') {
+      const currentScene = transcript.trim();
+      setSagaStory(prev => {
+        // Only add if it's different from the last scene
+        if (prev.length === 0 || prev[prev.length - 1] !== currentScene) {
+          return [...prev, currentScene];
+        }
+        return prev;
+      });
+      resetTranscript();
+    } else if (transcript && transcript.trim() && currentMode === 'single') {
+      setFinalTranscript(transcript.trim());
     }
     
     // Clear all timeouts
