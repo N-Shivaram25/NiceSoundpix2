@@ -445,18 +445,19 @@ const VoiceToImage = () => {
           try {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
-            // Runway ML Text-to-Video API call - using correct v1 endpoint
-            const response = await fetch('https://api.runway.team/v1/image_to_video', {
+            // Runway ML Gen-3 API call - using correct endpoint
+            const response = await fetch('https://api.runwayml.com/v1/image_to_video', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-Runway-Version': '2024-09-13'
               },
               body: JSON.stringify({
                 model: 'gen3a_turbo',
                 prompt_text: englishPrompt,
                 duration: 5,
-                ratio: '16:9',
+                aspect_ratio: '1280:768',
                 seed: Math.floor(Math.random() * 1000000)
               }),
             });
@@ -522,10 +523,11 @@ const VoiceToImage = () => {
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
                 
                 try {
-                  const statusResponse = await fetch(`https://api.runway.team/v1/tasks/${taskId}/status`, {
+                  const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}`, {
                     headers: {
                       'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
-                      'Content-Type': 'application/json'
+                      'Content-Type': 'application/json',
+                      'X-Runway-Version': '2024-09-13'
                     },
                   });
 
