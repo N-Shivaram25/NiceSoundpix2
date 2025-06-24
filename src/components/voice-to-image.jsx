@@ -24,6 +24,12 @@ const VoiceToImage = () => {
   const [isEditingStory, setIsEditingStory] = useState(false);
   const [isPlayingStory, setIsPlayingStory] = useState(false);
   const [sagaProjects, setSagaProjects] = useState([]);
+  const [lastTranscriptTime, setLastTranscriptTime] = useState(Date.now());
+  const [pauseDetectionTimeout, setPauseDetectionTimeout] = useState(null);
+  const [stopRecordingTimeout, setStopRecordingTimeout] = useState(null);
+  const [showAddSceneModal, setShowAddSceneModal] = useState(false);
+  const [newSceneText, setNewSceneText] = useState('');
+  const [isAddingVoiceScene, setIsAddingVoiceScene] = useState(false);
 
   const { transcript, finalTranscript: speechFinalTranscript, resetTranscript, browserSupportsSpeechRecognition } = useSpeechRecognition({
     transcribing: true,
@@ -46,29 +52,63 @@ const VoiceToImage = () => {
     }
   }, []);
 
-  // Handle speech completion with timeout for better sentence capture
+  // Handle speech completion with pause detection for saga mode
   useEffect(() => {
-    if (transcript && isListening) {
-      // Clear previous timeout
+    if (transcript && isListening && currentMode === 'saga') {
+      setLastTranscriptTime(Date.now());
+      
+      // Clear previous timeouts
+      if (pauseDetectionTimeout) {
+        clearTimeout(pauseDetectionTimeout);
+      }
+      if (stopRecordingTimeout) {
+        clearTimeout(stopRecordingTimeout);
+      }
+
+      // 2-second pause detection for scene cutting
+      const pauseTimeout = setTimeout(() => {
+        if (transcript.trim()) {
+          const currentScene = transcript.trim();
+          setSagaStory(prev => [...prev, currentScene]);
+          resetTranscript();
+          console.log('Scene cut after 2-second pause:', currentScene);
+        }
+      }, 2000);
+
+      // 5-second pause detection for stopping recording
+      const stopTimeout = setTimeout(() => {
+        if (transcript.trim()) {
+          const currentScene = transcript.trim();
+          setSagaStory(prev => [...prev, currentScene]);
+        }
+        stopListening();
+        console.log('Recording stopped after 5-second pause');
+      }, 5000);
+
+      setPauseDetectionTimeout(pauseTimeout);
+      setStopRecordingTimeout(stopTimeout);
+    } else if (transcript && isListening && currentMode === 'single') {
+      // Original single mode logic
       if (speechTimeout) {
         clearTimeout(speechTimeout);
       }
 
-      // Set new timeout to capture complete sentences
       const timeout = setTimeout(() => {
         if (transcript.trim()) {
-          if (currentMode === 'saga') {
-            handleSagaTranscript(transcript.trim());
-          } else {
-            setFinalTranscript(transcript.trim());
-          }
+          setFinalTranscript(transcript.trim());
         }
-      }, 2000); // Wait 2 seconds after last speech input
+      }, 2000);
 
       setSpeechTimeout(timeout);
     }
 
     return () => {
+      if (pauseDetectionTimeout) {
+        clearTimeout(pauseDetectionTimeout);
+      }
+      if (stopRecordingTimeout) {
+        clearTimeout(stopRecordingTimeout);
+      }
       if (speechTimeout) {
         clearTimeout(speechTimeout);
       }
@@ -87,10 +127,38 @@ const VoiceToImage = () => {
   }, [speechFinalTranscript, currentMode]);
 
   const handleSagaTranscript = (text) => {
-    // Split by sentence endings to create scenes
+    // This is now handled by pause detection, but keeping for manual transcript processing
     const sentences = text.split(/[.?!]+/).filter(sentence => sentence.trim().length > 0);
     const cleanedSentences = sentences.map(sentence => sentence.trim());
     setSagaStory(cleanedSentences);
+  };
+
+  const addNewScene = (sceneText) => {
+    if (sceneText.trim()) {
+      setSagaStory(prev => [...prev, sceneText.trim()]);
+      setNewSceneText('');
+      setShowAddSceneModal(false);
+      setIsAddingVoiceScene(false);
+    }
+  };
+
+  const startVoiceSceneRecording = () => {
+    setIsAddingVoiceScene(true);
+    setNewSceneText('');
+    SpeechRecognition.startListening({ 
+      continuous: true,
+      language: language,
+      interimResults: true
+    });
+  };
+
+  const stopVoiceSceneRecording = () => {
+    SpeechRecognition.stopListening();
+    setIsAddingVoiceScene(false);
+    if (transcript.trim()) {
+      addNewScene(transcript.trim());
+      resetTranscript();
+    }
   };
 
   const translateToEnglish = async (text, sourceLang) => {
@@ -324,14 +392,22 @@ const VoiceToImage = () => {
     // Capture any remaining transcript as final
     if (transcript && transcript.trim()) {
       if (currentMode === 'saga') {
-        handleSagaTranscript(transcript.trim());
+        setSagaStory(prev => [...prev, transcript.trim()]);
+        resetTranscript();
       } else {
         setFinalTranscript(transcript.trim());
       }
     }
     
+    // Clear all timeouts
     if (speechTimeout) {
       clearTimeout(speechTimeout);
+    }
+    if (pauseDetectionTimeout) {
+      clearTimeout(pauseDetectionTimeout);
+    }
+    if (stopRecordingTimeout) {
+      clearTimeout(stopRecordingTimeout);
     }
   };
 
@@ -547,6 +623,15 @@ const VoiceToImage = () => {
         {currentMode === 'saga' ? (
           // Saga Mode UI
           <div className="saga-mode">
+            {/* Add Scene Button */}
+            <button 
+              className="add-scene-button"
+              onClick={() => setShowAddSceneModal(true)}
+              title="Add New Scene"
+            >
+              <i className="fas fa-plus"></i>
+            </button>
+
             <div className="voice-container">
               <div className={`voice-animation ${isListening ? 'active' : ''}`}>
                 <div className="wave"></div>
@@ -576,9 +661,15 @@ const VoiceToImage = () => {
                         )}
                       </div>
                     ))}
+                    {isListening && transcript && (
+                      <div className="current-scene">
+                        <span className="scene-number">Scene {sagaStory.length + 1} (Recording...):</span>
+                        <span className="scene-text">{transcript}</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  transcript || (isListening ? 'Tell your story... Each sentence will become a scene.' : 'Your story will appear here as you speak')
+                  transcript || (isListening ? 'Tell your story... Pause for 2 seconds to cut scenes, 5 seconds to stop recording.' : 'Your story will appear here as you speak')
                 )}
               </div>
             </div>
@@ -658,6 +749,64 @@ const VoiceToImage = () => {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add Scene Modal */}
+            {showAddSceneModal && (
+              <div className="modal-overlay" onClick={() => setShowAddSceneModal(false)}>
+                <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                  <h3>Add New Scene</h3>
+                  <div className="add-scene-options">
+                    <div className="text-input-section">
+                      <textarea
+                        value={newSceneText}
+                        onChange={(e) => setNewSceneText(e.target.value)}
+                        placeholder="Type your new scene here..."
+                        rows={4}
+                        className="scene-textarea"
+                      />
+                      <button 
+                        onClick={() => addNewScene(newSceneText)}
+                        disabled={!newSceneText.trim()}
+                        className="add-text-scene-btn"
+                      >
+                        <i className="fas fa-plus"></i> Add Text Scene
+                      </button>
+                    </div>
+                    
+                    <div className="voice-input-section">
+                      <div className="voice-recording-status">
+                        {isAddingVoiceScene ? (
+                          <>
+                            <div className="recording-indicator">
+                              <div className="pulse-dot"></div>
+                              Recording... Click stop when done
+                            </div>
+                            <div className="live-transcript">
+                              {transcript || 'Speak your scene...'}
+                            </div>
+                          </>
+                        ) : (
+                          'Click to record your scene with voice'
+                        )}
+                      </div>
+                      <button 
+                        onClick={isAddingVoiceScene ? stopVoiceSceneRecording : startVoiceSceneRecording}
+                        className={`add-voice-scene-btn ${isAddingVoiceScene ? 'recording' : ''}`}
+                      >
+                        <i className={`fas fa-${isAddingVoiceScene ? 'stop' : 'microphone'}`}></i>
+                        {isAddingVoiceScene ? 'Stop Recording' : 'Record Voice Scene'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="modal-actions">
+                    <button onClick={() => setShowAddSceneModal(false)} className="cancel-btn">
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
