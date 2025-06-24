@@ -47,7 +47,7 @@ const VoiceToImage = () => {
 
   const currentSet = imageSets[currentSetIndex];
   const CLIPDROP_API_KEY = '365439e8863868b2d2d7cd6fa7ad12501cb00156468a57f65f489c60922e831a37575c0d9762a4519a5d306f657697e2';
-  const RUNWAY_ML_API_KEY = process.env.REACT_APP_RUNWAY_ML_API_KEY || 'key_954abfe1e4cbadd938b80b7de6e9e06c0af7aae23d9101ac0a1bfc3ecc5873b2dff12be4abf775a9d4f224ee57674beaf5fb8cadcc60ada01791eea736d53384'; // Replace with your actual Runway ML API key
+  const RUNWAY_ML_API_KEY = process.env.REACT_APP_RUNWAY_ML_API_KEY || 'rml_iIf1XKG6KRYKwgGRi9FZf38qSMbR4vgHOD'; // Replace with your actual Runway ML API key
 
   useEffect(() => {
     // Auto-detect language based on browser settings
@@ -416,8 +416,11 @@ const VoiceToImage = () => {
       return;
     }
 
-    if (RUNWAY_ML_API_KEY === 'your-runway-ml-api-key-here' || !RUNWAY_ML_API_KEY) {
-      setError('Please set your Runway ML API key in environment variables or update the code with your actual API key.');
+    console.log('Starting video generation with API key:', RUNWAY_ML_API_KEY ? 'Set' : 'Not set');
+    console.log('Video prompts to process:', videoPrompts);
+
+    if (!RUNWAY_ML_API_KEY || RUNWAY_ML_API_KEY === 'your-runway-ml-api-key-here') {
+      setError('Please set your Runway ML API key. Go to Runway ML, get your API key, and update the RUNWAY_ML_API_KEY variable.');
       return;
     }
 
@@ -430,29 +433,31 @@ const VoiceToImage = () => {
       const totalVideos = videoPrompts.length * 3; // 3 videos per prompt
       let completedVideos = 0;
 
-      const videoPromises = videoPrompts.map(async (prompt, promptIndex) => {
+      // Process prompts sequentially to avoid rate limits
+      for (let promptIndex = 0; promptIndex < videoPrompts.length; promptIndex++) {
+        const prompt = videoPrompts[promptIndex];
         const englishPrompt = await translateToEnglish(prompt, language);
         
+        console.log(`Processing prompt ${promptIndex + 1}: "${englishPrompt}"`);
+
         // Generate 3 videos for each prompt
-        const videosForPrompt = await Promise.all([1, 2, 3].map(async (videoNumber) => {
+        for (let videoNumber = 1; videoNumber <= 3; videoNumber++) {
           try {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
-            // Updated Runway ML Gen-3 API call
+            // Runway ML Text-to-Video API call
             const response = await fetch('https://api.runwayml.com/v1/image_to_video', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
-                'Content-Type': 'application/json',
-                'X-Runway-Version': '2024-11-06'
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
                 model: 'gen3a_turbo',
                 prompt_text: englishPrompt,
                 duration: 5,
                 ratio: '16:9',
-                watermark: false,
-                enhance_prompt: true
+                watermark: false
               }),
             });
 
@@ -461,21 +466,31 @@ const VoiceToImage = () => {
             if (!response.ok) {
               const errorText = await response.text();
               console.error(`API Error Response: ${errorText}`);
-              throw new Error(`Failed to generate video ${videoNumber} for prompt ${promptIndex + 1}: ${response.status} ${response.statusText}`);
+              
+              // Handle specific error cases
+              if (response.status === 401) {
+                throw new Error('Invalid API key. Please check your Runway ML API key.');
+              } else if (response.status === 429) {
+                throw new Error('Rate limit exceeded. Please wait and try again.');
+              } else if (response.status === 402) {
+                throw new Error('Insufficient credits. Please add credits to your Runway ML account.');
+              } else {
+                throw new Error(`API Error: ${response.status} - ${errorText}`);
+              }
             }
 
             const data = await response.json();
             console.log('API Response data:', data);
+            
             const taskId = data.id;
-
             if (!taskId) {
               throw new Error('No task ID received from Runway ML API');
             }
 
-            // Poll for video completion with improved error handling
+            // Poll for video completion
             let videoReady = false;
             let attempts = 0;
-            const maxAttempts = 120; // 10 minutes maximum wait time
+            const maxAttempts = 60; // 5 minutes maximum wait time
             
             while (!videoReady && attempts < maxAttempts) {
               await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
@@ -484,7 +499,7 @@ const VoiceToImage = () => {
                 const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}`, {
                   headers: {
                     'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
-                    'X-Runway-Version': '2024-11-06'
+                    'Content-Type': 'application/json'
                   },
                 });
 
@@ -502,7 +517,7 @@ const VoiceToImage = () => {
                   completedVideos++;
                   setVideoGenerationProgress((completedVideos / totalVideos) * 100);
                   
-                  return {
+                  const newVideo = {
                     id: `${promptIndex}-${videoNumber}`,
                     promptIndex,
                     videoNumber,
@@ -511,11 +526,14 @@ const VoiceToImage = () => {
                     translatedPrompt: englishPrompt,
                     status: 'completed'
                   };
+                  
+                  setGeneratedVideos(prev => [...prev, newVideo]);
+                  console.log('Video completed successfully:', newVideo);
+                  
                 } else if (statusData.status === 'FAILED') {
                   throw new Error(`Video generation failed: ${statusData.failure_reason || statusData.error || 'Unknown error'}`);
                 } else if (statusData.status === 'RUNNING' || statusData.status === 'PENDING') {
-                  // Continue polling
-                  console.log(`Video ${videoNumber} still processing...`);
+                  console.log(`Video ${videoNumber} still processing... (attempt ${attempts + 1})`);
                 }
                 
                 attempts++;
@@ -534,7 +552,7 @@ const VoiceToImage = () => {
             completedVideos++;
             setVideoGenerationProgress((completedVideos / totalVideos) * 100);
             
-            return {
+            const failedVideo = {
               id: `${promptIndex}-${videoNumber}`,
               promptIndex,
               videoNumber,
@@ -544,21 +562,20 @@ const VoiceToImage = () => {
               status: 'failed',
               error: error.message
             };
+            
+            setGeneratedVideos(prev => [...prev, failedVideo]);
+            
+            // Continue with next video instead of stopping everything
+            continue;
           }
-        }));
-
-        return videosForPrompt;
-      });
-
-      const allVideos = await Promise.all(videoPromises);
-      const flattenedVideos = allVideos.flat();
-      setGeneratedVideos(flattenedVideos);
+        }
+      }
       
-      console.log('All videos generated:', flattenedVideos);
+      console.log('Video generation process completed');
       
     } catch (err) {
       console.error('Video generation error:', err);
-      setError(err.message);
+      setError(`Video generation failed: ${err.message}`);
     } finally {
       setIsGeneratingVideos(false);
       setVideoGenerationProgress(0);
