@@ -445,8 +445,8 @@ const VoiceToImage = () => {
           try {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
-            // Runway ML Text-to-Video API call - using runway.team v1 endpoint
-            const response = await fetch('https://api.runway.team/v1/generate', {
+            // Runway ML Text-to-Video API call - using correct v1 endpoint
+            const response = await fetch('https://api.runway.team/v1/image_to_video', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
@@ -454,9 +454,9 @@ const VoiceToImage = () => {
               },
               body: JSON.stringify({
                 model: 'gen3a_turbo',
-                prompt: englishPrompt,
+                prompt_text: englishPrompt,
                 duration: 5,
-                aspect_ratio: '16:9',
+                ratio: '16:9',
                 seed: Math.floor(Math.random() * 1000000)
               }),
             });
@@ -522,7 +522,7 @@ const VoiceToImage = () => {
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
                 
                 try {
-                  const statusResponse = await fetch(`https://api.runway.team/v1/tasks/${taskId}`, {
+                  const statusResponse = await fetch(`https://api.runway.team/v1/tasks/${taskId}/status`, {
                     headers: {
                       'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
                       'Content-Type': 'application/json'
@@ -566,6 +566,10 @@ const VoiceToImage = () => {
                 } catch (pollError) {
                   console.error(`Error polling status for video ${videoNumber}:`, pollError);
                   attempts++;
+                  // Prevent unhandled promise rejection
+                  if (attempts >= maxAttempts) {
+                    throw new Error(`Failed to check video status: ${pollError.message || 'Unknown error'}`);
+                  }
                 }
               }
 
@@ -589,7 +593,7 @@ const VoiceToImage = () => {
               prompt: prompt,
               translatedPrompt: englishPrompt,
               status: 'failed',
-              error: error.message
+              error: error.message || 'Video generation failed'
             };
             
             setGeneratedVideos(prev => [...prev, failedVideo]);
@@ -604,7 +608,7 @@ const VoiceToImage = () => {
       
     } catch (err) {
       console.error('Video generation error:', err);
-      setError(`Video generation failed: ${err.message}`);
+      setError(`Video generation failed: ${err.message || 'Unknown error occurred'}`);
     } finally {
       setIsGeneratingVideos(false);
       setVideoGenerationProgress(0);
