@@ -1,3 +1,206 @@
+/* HEADER NAVIGATION */
+.header-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: white;
+  border-bottom: 2px solid var(--border-color);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+}
+
+.nav-left {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+}
+
+.nav-button {
+  padding: 0.75rem 1.5rem;
+  background: #f8f9fa;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-color);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-button:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.nav-button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.profile-icon {
+  font-size: 1.5rem;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  justify-content: center;
+}
+
+/* SAGA MODE STYLES */
+.saga-mode {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.saga-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.story-preview {
+  text-align: left;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.story-scene {
+  margin: 1rem 0;
+  padding: 0.5rem;
+  border-left: 3px solid var(--primary-color);
+  background: #f8f9fa;
+  border-radius: 0 8px 8px 0;
+}
+
+.scene-number {
+  font-weight: 600;
+  color: var(--primary-color);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.scene-text {
+  line-height: 1.5;
+}
+
+.story-edit-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.saga-storyboard {
+  margin: 3rem 0;
+}
+
+.storyboard-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.storyboard-scene {
+  background: white;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+  position: relative;
+}
+
+.storyboard-scene.active-scene {
+  transform: scale(1.05);
+  box-shadow: 0 8px 30px rgba(67, 97, 238, 0.3);
+  border: 3px solid var(--primary-color);
+}
+
+.scene-number-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--primary-color);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.storyboard-scene img {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+}
+
+.storyboard-scene .scene-text {
+  padding: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: #555;
+  background: #f8f9fa;
+}
+
+.scene-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem;
+  justify-content: center;
+}
+
+.scene-actions button {
+  padding: 0.5rem 1rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.scene-actions button:hover {
+  background: var(--secondary-color);
+}
+
+.edit-button, .play-button, .save-button {
+  background: var(--success-color);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.edit-button:hover, .play-button:hover, .save-button:hover {
+  background: #3a86c7;
+  transform: translateY(-2px);
+}
+
+.date-tag {
+  font-size: 0.8rem;
+  color: #666;
+  display: block;
+  margin-top: 0.25rem;
+}
+
 /* BRIGHT THEME */
 .bright-theme {
   --primary-color: #4361ee;
@@ -441,12 +644,28 @@
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
+  .header-nav {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  
+  .nav-left {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .nav-button {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  
   .images-container {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
   
-  .controls {
+  .controls, .saga-controls {
     flex-direction: column;
     align-items: center;
   }
@@ -472,6 +691,14 @@
   
   .navigation span {
     max-width: 100%;
+  }
+  
+  .storyboard-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .storyboard-scene img {
+    height: 200px;
   }
 }
 
