@@ -47,7 +47,7 @@ const VoiceToImage = () => {
 
   const currentSet = imageSets[currentSetIndex];
   const CLIPDROP_API_KEY = '365439e8863868b2d2d7cd6fa7ad12501cb00156468a57f65f489c60922e831a37575c0d9762a4519a5d306f657697e2';
-  const RUNWAY_ML_API_KEY = 'your-runway-ml-api-key-here'; // Replace with your actual Runway ML API key
+  const RUNWAY_ML_API_KEY = 'key_123456789012345678901234567890'; // Replace with your actual Runway ML API key
 
   useEffect(() => {
     // Auto-detect language based on browser settings
