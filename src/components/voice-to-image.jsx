@@ -47,7 +47,7 @@ const VoiceToImage = () => {
 
   const currentSet = imageSets[currentSetIndex];
   const CLIPDROP_API_KEY = '365439e8863868b2d2d7cd6fa7ad12501cb00156468a57f65f489c60922e831a37575c0d9762a4519a5d306f657697e2';
-  const RUNWAY_ML_API_KEY = 'key_1bbe861aa42b13ec185d3bf1f2227afd4fae57010cdd674f8de0e91902ec4427d3cb4123fe9405893bd67f323ca956ed90a482f3f9ac600943605719dbe68cb7';
+  const RUNWAY_ML_API_KEY = 'key_96be78cd056f7123b3c17dd041dc4059945de770582f895752db13da4d29f61d580c8f5137a666f6cb84e2b237a492b0a1eae4665bdf27c49be44737a954d801';
 
   useEffect(() => {
     // Auto-detect language based on browser settings
@@ -445,8 +445,8 @@ const VoiceToImage = () => {
           try {
             console.log(`Generating video ${videoNumber} for prompt: ${englishPrompt}`);
             
-            // Runway ML Text-to-Video API call - using correct endpoint
-            const response = await fetch('https://api.runwayml.com/v1/image_to_video', {
+            // Runway ML Text-to-Video API call - using v2 endpoint
+            const response = await fetch('https://api.runwayml.com/v2/generate', {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
@@ -454,9 +454,9 @@ const VoiceToImage = () => {
               },
               body: JSON.stringify({
                 model: 'gen3a_turbo',
-                prompt_text: englishPrompt,
+                prompt: englishPrompt,
                 duration: 5,
-                ratio: '16:9',
+                aspect_ratio: '16:9',
                 seed: Math.floor(Math.random() * 1000000)
               }),
             });
@@ -522,7 +522,7 @@ const VoiceToImage = () => {
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
                 
                 try {
-                  const statusResponse = await fetch(`https://api.runwayml.com/v1/tasks/${taskId}/status`, {
+                  const statusResponse = await fetch(`https://api.runwayml.com/v2/tasks/${taskId}`, {
                     headers: {
                       'Authorization': `Bearer ${RUNWAY_ML_API_KEY}`,
                       'Content-Type': 'application/json'
